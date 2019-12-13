@@ -9,8 +9,10 @@
 #include <atomic>
 #include <mutex>         // std::mutex, std::unique_lock
 #include <cmath>
-
-
+#include "httplib.h"
+#include <time.h>
+#include <ctime>
+#include <cuchar>
 // It makes sense only for video-Camera (not for video-File)
 // To use - uncomment the following line. Optical-flow is supported only by OpenCV 3.x - 4.x
 //#define TRACK_OPTFLOW
@@ -21,7 +23,7 @@
 
 
 #include "yolo_v2_class.hpp"    // imported functions from DLL
-
+#include "base64.cpp"
 #ifdef OPENCV
 #ifdef ZED_STEREO
 #include <sl_zed/Camera.hpp>
@@ -34,6 +36,7 @@ float getMedian(std::vector<float> &v) {
     std::nth_element(v.begin(), v.begin() + n, v.end());
     return v[n];
 }
+//check
 
 std::vector<bbox_t> get_3d_coordinates(std::vector<bbox_t> bbox_vect, cv::Mat xyzrgba)
 {
@@ -174,6 +177,55 @@ std::vector<bbox_t> get_3d_coordinates(std::vector<bbox_t> bbox_vect, cv::Mat xy
 #endif    // USE_CMAKE_LIBS
 #endif    // CV_VERSION_EPOCH
 
+bool ccw(cv::Point2f A,cv::Point2f B,cv::Point2f C)
+{
+bool val=true;
+if((C.y-A.y) * (B.x-A.x) > (B.y-A.y) * (C.x-A.x))
+{
+val=true;
+}
+else
+{
+val=false;
+}
+    return val;
+}
+bool intersect(cv::Point2f A,cv::Point2f B,cv::Point2f C,cv::Point2f D)
+{
+bool val=true;
+if(ccw(A,C,D) != ccw(B,C,D) && ccw(A,B,C) != ccw(A,B,D))
+{
+val=true;
+}
+else
+{
+val=false;
+}
+    return val;
+}
+
+void addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
+{
+    using namespace std;
+    using namespace cv;
+    
+    cv::Mat cur_frame;
+    std::cout << "HelloWorld!";
+    
+    if (filename == "web_camera") {
+        cv::VideoCapture cap(0);
+    
+        int w = (int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)); 
+        int h = (int)(cap.get(CV_CAP_PROP_FRAME_HEIGHT));
+        // std::cout<<"w: "+std::to_string(h)+"H: "+std::to_string(h) +"\n";
+
+        cv::Mat logo = cv::imread("logo.png");
+        cv::resize(logo, logo, cv::Size(), 0.2, 0.2);
+        cv::Mat test(640, 480, CV_8UC3, cv::Scalar(0,0,0));        
+        // test.copyTo(temp);
+        // logo.copyTo(temp(cv::Rect(cur_frame.cols-logo.cols, cur_frame.cols-logo.rows, logo.cols, logo.rows)));
+    }
+}
 
 void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std::string> obj_names,
     int current_det_fps = -1, int current_cap_fps = -1)
@@ -182,10 +234,21 @@ void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std
 
     for (auto &i : result_vec) {
         cv::Scalar color = obj_id_to_color(i.obj_id);
+
+if(i.obj_id==2)
+{
         cv::rectangle(mat_img, cv::Rect(i.x, i.y, i.w, i.h), color, 2);
-        if (obj_names.size() > i.obj_id) {
-            std::string obj_name = obj_names[i.obj_id];
-            if (i.track_id > 0) obj_name += " - " + std::to_string(i.track_id);
+}
+//check
+       // if (obj_names.size() > i.obj_id) std::cout << obj_names[i.obj_id] << " - ";
+		std::string test = "x = " + std::to_string(i.x) + ", y = " + std::to_string(i.y) + ", w = " + std::to_string(i.w) + ", h = " + std::to_string(i.h);// + std::setprecision(3) + ", prob = " + std::to_string(i.prob);
+        if (i.track_id > 0) test += " - " + std::to_string(i.track_id);
+    	
+//std::cout << test << std::endl;
+
+        if (obj_names.size() > i.obj_id) {//check
+            std::string obj_name = "";//obj_names[i.obj_id] + " - " + std::to_string(i.prob);
+            if (i.track_id > 0) obj_name += std::to_string(i.track_id);
             cv::Size const text_size = getTextSize(obj_name, cv::FONT_HERSHEY_COMPLEX_SMALL, 1.2, 2, 0);
             int max_width = (text_size.width > i.w + 2) ? text_size.width : (i.w + 2);
             max_width = std::max(max_width, (int)i.w + 2);
@@ -193,24 +256,29 @@ void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std
             std::string coords_3d;
             if (!std::isnan(i.z_3d)) {
                 std::stringstream ss;
-                ss << std::fixed << std::setprecision(2) << "x:" << i.x_3d << "m y:" << i.y_3d << "m z:" << i.z_3d << "m ";
+                // ss << std::fixed << std::setprecision(2) << "x:" << i.x_3d << "m y:" << i.y_3d << "m z:" << i.z_3d << "m ";
                 coords_3d = ss.str();
                 cv::Size const text_size_3d = getTextSize(ss.str(), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, 1, 0);
                 int const max_width_3d = (text_size_3d.width > i.w + 2) ? text_size_3d.width : (i.w + 2);
                 if (max_width_3d > max_width) max_width = max_width_3d;
             }
-
-            cv::rectangle(mat_img, cv::Point2f(std::max((int)i.x - 1, 0), std::max((int)i.y - 35, 0)),
+if(i.obj_id==2)
+{
+            cv::rectangle(mat_img, cv::Point2f(std::max((int)i.x - 1, 0), std::max((int)i.y - 10, 0)),
                 cv::Point2f(std::min((int)i.x + max_width, mat_img.cols - 1), std::min((int)i.y, mat_img.rows - 1)),
                 color, CV_FILLED, 8, 0);
-            putText(mat_img, obj_name, cv::Point2f(i.x, i.y - 16), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.2, cv::Scalar(0, 0, 0), 2);
+            putText(mat_img, obj_name, cv::Point2f(i.x, i.y - 8), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0, 0, 0), 1);
+//check
             if(!coords_3d.empty()) putText(mat_img, coords_3d, cv::Point2f(i.x, i.y-1), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.8, cv::Scalar(0, 0, 0), 1);
+}
         }
     }
-    if (current_det_fps >= 0 && current_cap_fps >= 0) {
+    /* check
+	if (current_det_fps >= 0 && current_cap_fps >= 0) {
         std::string fps_str = "FPS detection: " + std::to_string(current_det_fps) + "   FPS capture: " + std::to_string(current_cap_fps);
         putText(mat_img, fps_str, cv::Point2f(10, 20), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.2, cv::Scalar(50, 255, 0), 2);
     }
+	*/
 }
 #endif    // OPENCV
 
@@ -219,12 +287,44 @@ void show_console_result(std::vector<bbox_t> const result_vec, std::vector<std::
     if (frame_id >= 0) std::cout << " Frame: " << frame_id << std::endl;
     for (auto &i : result_vec) {
         if (obj_names.size() > i.obj_id) std::cout << obj_names[i.obj_id] << " - ";
-        std::cout << "obj_id = " << i.obj_id << ",  x = " << i.x << ", y = " << i.y
-            << ", w = " << i.w << ", h = " << i.h
-            << std::setprecision(3) << ", prob = " << i.prob << std::endl;
+		std::string test = "x = " + std::to_string(i.x) + ", y = " + std::to_string(i.y) + ", w = " + std::to_string(i.w) + ", h = " + std::to_string(i.h);// + std::setprecision(3) + ", prob = " + std::to_string(i.prob);
+        if (i.track_id > 0) test += " - " + std::to_string(i.track_id);
+    	//std::cout << test << std::endl;
     }
 }
 
+void send2_compusult(std::string js,const char* queryPart)
+{
+	//httplib::Client cli("24.137.216.70", 80);
+    httplib::Client cli("ogc-hub.compusult.com/SensorThings/v1.0/Datastreams%28199%29/Observations");
+    //cli.set_auth("scira", "geosensorweblab");      
+    std::string jsn = js;
+	httplib::Headers hdr;  
+	//hdr.emplace("Content-Type", "application/json");
+	 //hdr.emplace(httplib::make_basic_authentication_header("main", "bdbe16d7-f55e-520b-8c97-5354ec272aed")); //sandbox
+    hdr.emplace(httplib::make_basic_authentication_header("ucalgary", "scira01")); //Compusult
+
+//	{ {"Content-Type", "application/json"},{ };
+    cli.set_follow_location(true);
+    std::string contstr="application/json";
+    const char* contt=contstr.c_str();
+	auto res = cli.Post(queryPart, hdr, jsn, contt);
+
+	bool iiii=cli.is_valid();
+	if (res && (res->status == 200 || res->status == 201)) {
+		std::cout << res->body << std::endl;
+	}
+	std::cout <<res->body << std::endl;
+}
+void show_console_result2(std::vector<bbox_t> const result_vec, std::vector<std::string> const obj_names, int fcount) {
+    if (fcount >= 0) std::cout << " Frame: " << fcount << std::endl;
+    for (auto &i : result_vec) {
+        if (obj_names.size() > i.obj_id) std::cout << obj_names[i.obj_id] << " - ";
+		std::string test = "x = " + std::to_string(i.x) + ", y = " + std::to_string(i.y) + ", w = " + std::to_string(i.w) + ", h = " + std::to_string(i.h);// + std::setprecision(3) + ", prob = " + std::to_string(i.prob);
+        if (i.track_id > 0) test += " - " + std::to_string(i.track_id);
+    	std::cout << test << std::endl;
+    }
+}
 std::vector<std::string> objects_names_from_file(std::string const filename) {
     std::ifstream file(filename);
     std::vector<std::string> file_lines;
@@ -267,6 +367,8 @@ public:
     {}
 };
 
+cv::Mat temp;
+
 int main(int argc, char *argv[])
 {
     std::string  names_file = "data/coco.names";
@@ -282,7 +384,9 @@ int main(int argc, char *argv[])
     }
     else if (argc > 1) filename = argv[1];
 
-    float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.2;
+    addUCalgaryLogo_init(temp, filename);
+    
+    float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.7;
 
     Detector detector(cfg_file, weights_file);
 
@@ -298,6 +402,14 @@ int main(int argc, char *argv[])
     Tracker_optflow tracker_flow;
     //detector.wait_stream = true;
 #endif  // TRACK_OPTFLOW
+
+int frame_count=0;
+std::vector<bbox_t> previous_box;
+std::vector<int> intersect_frame;
+std::vector<int> intersect_track;
+std::string speedtxt;
+int car_count=0;
+int person_count=0;
 
 
     while (true)
@@ -317,8 +429,8 @@ int main(int argc, char *argv[])
                 protocol == "rtmp://" || protocol == "rtsp://" || protocol == "http://" || protocol == "https:/" ||    // video network stream
                 filename == "zed_camera" || file_ext == "svo" || filename == "web_camera")   // ZED stereo camera
 
-            {
-                if (protocol == "rtsp://" || protocol == "http://" || protocol == "https:/" || filename == "zed_camera" || filename == "web_camera")
+            {//check
+                if (protocol == "rtsp://" || protocol == "http://" || protocol == "https:/" || filename == "zed_camera" /*|| filename == "web_camera"*/)
                     detection_sync = false;
 
                 cv::Mat cur_frame;
@@ -424,7 +536,7 @@ int main(int argc, char *argv[])
                             detection_data.cap_frame = cv::Mat(frame_size, CV_8UC3);
                         }
 
-                        if (!detection_sync) {
+                     if (!detection_sync) {
                             cap2draw.send(detection_data);       // skip detection
                         }
                         cap2prepare.send(detection_data);
@@ -469,6 +581,7 @@ int main(int argc, char *argv[])
                         detection_data.new_detection = true;
                         detection_data.result_vec = result_vec;
                         detect2draw.send(detection_data);
+						//show_console_result(result_vec, obj_names, frame_count);//detection_data.frame_id); //check
                     } while (!detection_data.exit_flag);
                     std::cout << " t_detect exit \n";
                 });
@@ -606,12 +719,110 @@ int main(int argc, char *argv[])
 
                     detection_data = draw2show.receive();
                     cv::Mat draw_frame = detection_data.draw_frame;
-
+                                                          
+                    //cv::addWeighted(temp, 0.1, draw_frame, 0.9, 0.0, draw_frame); //addUCalgaryLogo
+                    
                     //if (extrapolate_flag) {
                     //    cv::putText(draw_frame, "extrapolate", cv::Point2f(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, cv::Scalar(50, 50, 0), 2);
                     //}
+                    int w1=0;
+                    int h1=0;
+                    int w2=0;
+                    int h2=0;
+                    for (auto &i : detection_data.result_vec) {
+                        if(i.obj_id==0)
+                        {
+                            person_count++;
+                        }
+                        if(i.obj_id==2)
+                        {
+                            car_count++;
+                        for(auto &j : previous_box){
+                            if(j.obj_id==2)
+                            {
+                               w1=i.x;
+                               h1=i.y;
+                               w2=i.x+i.w;
+                               h2= i.y+i.h;
+                                                                             
+                            if(i.track_id == j.track_id) {
+                                //std::cout<< "**************************************************\n";
+                               bool res_down=intersect(cv::Point2f(w2-20,h2-20),cv::Point2f(i.x+i.w,i.y+i.h),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
+						   if(res_down ==true)
+							   {
+                            intersect_frame.push_back(detection_data.frame_id);
+                            intersect_track.push_back(j.track_id);
+							   }
+                               if(intersect_track.size()>0)
+                               {
+                                  bool res_up=intersect(cv::Point2f(w1-20,h1-20),cv::Point2f(i.x,i.y),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
+                                if(res_up ==true)
+                                    {
+                                    //std::cout<<"ppppppppppppppppppppppp\n";
+                                  std::vector<int> ::iterator itr=std::find(intersect_track.begin(),intersect_track.end(),i.track_id);
+                                  int indx=std::distance(intersect_track.begin(),itr);
+                                  std::vector<int>::iterator it = intersect_frame.begin();
+	                              std::advance(it, indx);
+                                  //std::cout<<"---------------------------this frame----------------------------\n";
+                                  //std::cout<<std::to_string(detection_data.frame_id)+"\n";
+                                  //std::cout<<"---------------------------past frame----------------------------\n";
+                                  //std::cout<<std::to_string(*it)+"\n"; 
+                                  //std::cout<<"---------------------------delta t----------------------------\n";
+                                  int this_frame=int(*it);                                
+                                  double deltat=(double(detection_data.frame_id+1-this_frame))/60;
+                                  //std::cout<<std::to_string(deltat); 
+                                  double speedo=3.5/deltat;
+                                  intersect_frame.clear();
+                                  intersect_track.clear();
+                                  speedtxt=std::to_string(int(speedo));
+                                  time_t rawtime;
+                                  struct tm*timeinfo;
+                                  time(&rawtime);
+                                  timeinfo=gmtime (&rawtime);
+                                  std::string strtime= asctime(timeinfo);
+                                  char buf[sizeof "2019-12-09T19:49:39Z"];
+                                  strftime(buf,sizeof buf, "%FT%TZ",timeinfo);
+                                  std::cout<<buf;
+                                  std::string bufString(buf);
+                                  std::string buffer = "\"" + bufString + "\"";
+                                 // std::string jsn = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(speedo))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                                 //send2_compusult(jsn,speed_query);                                   
+                                  std::cout<<"speed:"+speedtxt+"\n";
+                                    } 
+                               }
+    // v contains x 
+                            }                              
+                        }
+                              }
+                    }
+                             }
+                            std::string jsn = "{\"result\" :\""+ std::to_string(int(car_count))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                                 std::string speed_querystr="/";
+                                 const char* speed_query=speed_querystr.c_str();
+                             send2_compusult(jsn,speed_query);
+                             std::cout<<"car:"+std::to_string(car_count)+"\n";
+                             std::cout<<"person:"+std::to_string(person_count)+"\n";
+                             person_count=0;
+                             car_count=0;
+               // cv::imshow("window name", mat_img);
+previous_box=detection_data.result_vec;
+                putText(draw_frame, speedtxt, cv::Point2f(50, 50), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(255,255, 0), 1);
+                cv::line( draw_frame, cv::Point( 0, frame_size.height*5/8 ), cv::Point( frame_size.width, frame_size.height*5/8), cv::Scalar( 255, 0, 0 ),2,8);
+      
+     /*   std::vector<uchar> bufr; 
+        imencode(".jpg", draw_frame, bufr); 
+        uchar *enc_msg = new uchar[bufr.size()];
+         for(int i=0; i< bufr.size(); i++) enc_msg[i] = bufr[i]; 
+         std::string encoded = base64_encode(enc_msg, bufr.size()); */
 
-                    cv::imshow("window name", draw_frame);
+        
+        //std::cout<<encoded;
+               // show_console_result2(detection_data.result_vec, obj_names,detection_data.frame_id);                    
+cv::imshow("window name", draw_frame); 
+				//	if (detection_data.frame_id % 100 == 0) {
+						// cv::imwrite(std::to_string(detection_data.frame_id % 100)+".jpg",draw_frame); //check				
+				//	}
+			
                     int key = cv::waitKey(3);    // 3 or 16ms
                     if (key == 'f') show_small_boxes = !show_small_boxes;
                     if (key == 'p') while (true) if (cv::waitKey(100) == 'p') break;
@@ -661,9 +872,8 @@ int main(int argc, char *argv[])
                 std::cout << " Time: " << spent.count() << " sec \n";
 
                 //result_vec = detector.tracking_id(result_vec);    // comment it - if track_id is not required
-                draw_boxes(mat_img, result_vec, obj_names);
-                cv::imshow("window name", mat_img);
-                show_console_result(result_vec, obj_names);
+                
+                frame_count++;
                 cv::waitKey(0);
             }
 #else   // OPENCV
