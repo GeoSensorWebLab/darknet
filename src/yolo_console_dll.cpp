@@ -210,7 +210,6 @@ void addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
     using namespace cv;
     
     cv::Mat cur_frame;
-    std::cout << "HelloWorld!";
     
     if (filename == "web_camera") {
         cv::VideoCapture cap(0);
@@ -295,27 +294,55 @@ void show_console_result(std::vector<bbox_t> const result_vec, std::vector<std::
 
 void send2_compusult(std::string js,const char* queryPart)
 {
-	//httplib::Client cli("24.137.216.70", 80);
-    httplib::Client cli("ogc-hub.compusult.com/SensorThings/v1.0/Datastreams%28199%29/Observations");
-    //cli.set_auth("scira", "geosensorweblab");      
-    std::string jsn = js;
-	httplib::Headers hdr;  
+    bool SensorUp = false;
+    httplib::Headers hdr;
+    std::string host;    
+    time_t rawtime;
+    struct tm*timeinfo;
+            
+    if (SensorUp) {
+        std::cout << "send to SensorUP" << std::endl;
+        host = "52.11.65.90"; // SensorUp IP
+        // 52.11.65.90:80/v1.0/Datastreams%281630%29/Observations
+        hdr.emplace(httplib::make_basic_authentication_header("main", "bdbe16d7-f55e-520b-8c97-5354ec272aed")); //sandbox
+        std::string temp = "/v1.0/Datastreams%281630%29/Observations"; 
+        queryPart = temp.c_str();
+        time(&rawtime);
+        timeinfo = gmtime(&rawtime);
+        std::string strtime = asctime(timeinfo);
+        char buf[sizeof "2019-12-09T19:49:39Z"];
+        strftime(buf, sizeof buf, "%FT%TZ", timeinfo);
+        std::string bufString(buf);
+        std::string buffer = "\"" + bufString + "\"";
+        
+        js = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(32))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+    } else {
+        std::cout << "send to Compusult" << std::endl;
+        host = "https://ogc-hub.compusult.com/SensorHub"; // "https://ogc-hub.compusult.com"; // 24.137.216.70 // Compusult IP
+        // 24.137.216.70:80/SensorHub/SensorThings/v1.0/Datastreams%28199%29/Observations
+
+        std::string temp = "/SensorThings/v1.0/Datastreams%28199%29/Observations"; 
+        queryPart = temp.c_str();
+        
+        hdr.emplace(httplib::make_basic_authentication_header("ucalgary", "scira01")); //Compusult
+    }
+ 
 	//hdr.emplace("Content-Type", "application/json");
-	 //hdr.emplace(httplib::make_basic_authentication_header("main", "bdbe16d7-f55e-520b-8c97-5354ec272aed")); //sandbox
-    hdr.emplace(httplib::make_basic_authentication_header("ucalgary", "scira01")); //Compusult
+    const char *hostUrl = host.c_str();
+    httplib::Client cli(hostUrl);
 
-//	{ {"Content-Type", "application/json"},{ };
-    cli.set_follow_location(true);
-    std::string contstr="application/json";
-    const char* contt=contstr.c_str();
-	auto res = cli.Post(queryPart, hdr, jsn, contt);
+    cli.set_follow_location(true); // it will give the permission for redirecting to another address
+    std::string contstr = "application/json";
+    const char* contt = contstr.c_str();
+    auto res = cli.Post(queryPart, hdr, js, contt); 
 
-	bool iiii=cli.is_valid();
+	bool iiii = cli.is_valid();
 	if (res && (res->status == 200 || res->status == 201)) {
 		std::cout << res->body << std::endl;
 	}
-	std::cout <<res->body << std::endl;
+	std::cout << res->body << std::endl;    
 }
+
 void show_console_result2(std::vector<bbox_t> const result_vec, std::vector<std::string> const obj_names, int fcount) {
     if (fcount >= 0) std::cout << " Frame: " << fcount << std::endl;
     for (auto &i : result_vec) {
@@ -706,7 +733,6 @@ int person_count=0;
                 // show detection
                 detection_data_t detection_data;
                 do {
-
                     steady_end = std::chrono::steady_clock::now();
                     float time_sec = std::chrono::duration<double>(steady_end - steady_start).count();
                     if (time_sec >= 1) {
@@ -730,98 +756,101 @@ int person_count=0;
                     int w2=0;
                     int h2=0;
                     for (auto &i : detection_data.result_vec) {
-                        if(i.obj_id==0)
-                        {
+                        if(i.obj_id==0) {
                             person_count++;
                         }
-                        if(i.obj_id==2)
-                        {
-                            car_count++;
-                        for(auto &j : previous_box){
-                            if(j.obj_id==2)
-                            {
-                               w1=i.x;
-                               h1=i.y;
-                               w2=i.x+i.w;
-                               h2= i.y+i.h;
-                                                                             
-                            if(i.track_id == j.track_id) {
-                                //std::cout<< "**************************************************\n";
-                               bool res_down=intersect(cv::Point2f(w2-20,h2-20),cv::Point2f(i.x+i.w,i.y+i.h),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
-						   if(res_down ==true)
-							   {
-                            intersect_frame.push_back(detection_data.frame_id);
-                            intersect_track.push_back(j.track_id);
-							   }
-                               if(intersect_track.size()>0)
-                               {
-                                  bool res_up=intersect(cv::Point2f(w1-20,h1-20),cv::Point2f(i.x,i.y),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
-                                if(res_up ==true)
-                                    {
-                                    //std::cout<<"ppppppppppppppppppppppp\n";
-                                  std::vector<int> ::iterator itr=std::find(intersect_track.begin(),intersect_track.end(),i.track_id);
-                                  int indx=std::distance(intersect_track.begin(),itr);
-                                  std::vector<int>::iterator it = intersect_frame.begin();
-	                              std::advance(it, indx);
-                                  //std::cout<<"---------------------------this frame----------------------------\n";
-                                  //std::cout<<std::to_string(detection_data.frame_id)+"\n";
-                                  //std::cout<<"---------------------------past frame----------------------------\n";
-                                  //std::cout<<std::to_string(*it)+"\n"; 
-                                  //std::cout<<"---------------------------delta t----------------------------\n";
-                                  int this_frame=int(*it);                                
-                                  double deltat=(double(detection_data.frame_id+1-this_frame))/60;
-                                  //std::cout<<std::to_string(deltat); 
-                                  double speedo=3.5/deltat;
-                                  intersect_frame.clear();
-                                  intersect_track.clear();
-                                  speedtxt=std::to_string(int(speedo));
-                                  time_t rawtime;
-                                  struct tm*timeinfo;
-                                  time(&rawtime);
-                                  timeinfo=gmtime (&rawtime);
-                                  std::string strtime= asctime(timeinfo);
-                                  char buf[sizeof "2019-12-09T19:49:39Z"];
-                                  strftime(buf,sizeof buf, "%FT%TZ",timeinfo);
-                                  std::cout<<buf;
-                                  std::string bufString(buf);
-                                  std::string buffer = "\"" + bufString + "\"";
-                                 // std::string jsn = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(speedo))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
-                                 //send2_compusult(jsn,speed_query);                                   
-                                  std::cout<<"speed:"+speedtxt+"\n";
-                                    } 
-                               }
-    // v contains x 
-                            }                              
-                        }
-                              }
-                    }
-                             }
-                            std::string jsn = "{\"result\" :\""+ std::to_string(int(car_count))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
-                                 std::string speed_querystr="/";
-                                 const char* speed_query=speed_querystr.c_str();
-                             send2_compusult(jsn,speed_query);
-                             std::cout<<"car:"+std::to_string(car_count)+"\n";
-                             std::cout<<"person:"+std::to_string(person_count)+"\n";
-                             person_count=0;
-                             car_count=0;
-               // cv::imshow("window name", mat_img);
-previous_box=detection_data.result_vec;
-                putText(draw_frame, speedtxt, cv::Point2f(50, 50), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(255,255, 0), 1);
-                cv::line( draw_frame, cv::Point( 0, frame_size.height*5/8 ), cv::Point( frame_size.width, frame_size.height*5/8), cv::Scalar( 255, 0, 0 ),2,8);
-      
-     /*   std::vector<uchar> bufr; 
-        imencode(".jpg", draw_frame, bufr); 
-        uchar *enc_msg = new uchar[bufr.size()];
-         for(int i=0; i< bufr.size(); i++) enc_msg[i] = bufr[i]; 
-         std::string encoded = base64_encode(enc_msg, bufr.size()); */
 
-        
-        //std::cout<<encoded;
-               // show_console_result2(detection_data.result_vec, obj_names,detection_data.frame_id);                    
-cv::imshow("window name", draw_frame); 
-				//	if (detection_data.frame_id % 100 == 0) {
-						// cv::imwrite(std::to_string(detection_data.frame_id % 100)+".jpg",draw_frame); //check				
-				//	}
+                        if(i.obj_id==2) {
+                            car_count++;
+                            for(auto &j : previous_box) {
+                                if(j.obj_id==2) {
+                                    w1=i.x;
+                                    h1=i.y;
+                                    w2=i.x+i.w;
+                                    h2= i.y+i.h;
+                                                                                
+                                    if(i.track_id == j.track_id) {
+                                        //std::cout<< "**************************************************\n";
+                                        bool res_down=intersect(cv::Point2f(w2-20,h2-20),cv::Point2f(i.x+i.w,i.y+i.h),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
+                                        if(res_down ==true) {
+                                            intersect_frame.push_back(detection_data.frame_id);
+                                            intersect_track.push_back(j.track_id);
+                                        }
+
+                                        if(intersect_track.size() > 0) {
+                                            bool res_up=intersect(cv::Point2f(w1-20,h1-20),cv::Point2f(i.x,i.y),cv::Point2f(0,frame_size.height*5/8 ),cv::Point2f(draw_frame.size().width,frame_size.height*5/8 ));
+                                            if(res_up ==true) {
+                                                //std::cout<<"ppppppppppppppppppppppp\n";
+                                                std::vector<int> ::iterator itr=std::find(intersect_track.begin(),intersect_track.end(),i.track_id);
+                                                int indx=std::distance(intersect_track.begin(),itr);
+                                                std::vector<int>::iterator it = intersect_frame.begin();
+                                                std::advance(it, indx);
+                                                //std::cout<<"---------------------------this frame----------------------------\n";
+                                                //std::cout<<std::to_string(detection_data.frame_id)+"\n";
+                                                //std::cout<<"---------------------------past frame----------------------------\n";
+                                                //std::cout<<std::to_string(*it)+"\n"; 
+                                                //std::cout<<"---------------------------delta t----------------------------\n";
+                                                int this_frame=int(*it);                                
+                                                double deltat=(double(detection_data.frame_id+1-this_frame))/60;
+                                                //std::cout<<std::to_string(deltat); 
+                                                double speedo=3.5/deltat;
+                                                intersect_frame.clear();
+                                                intersect_track.clear();
+                                                speedtxt=std::to_string(int(speedo));
+                                                
+                                                time_t rawtime;
+                                                struct tm*timeinfo;
+                                                time(&rawtime);
+                                                timeinfo=gmtime (&rawtime);
+                                                std::string strtime= asctime(timeinfo);
+                                                char buf[sizeof "2019-12-09T19:49:39Z"];
+                                                strftime(buf,sizeof buf, "%FT%TZ",timeinfo);
+                                                
+                                                std::cout<<buf;
+                                                std::string bufString(buf);
+                                                std::string buffer = "\"" + bufString + "\"";
+                                                // std::string jsn = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(speedo))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                                                //send2_compusult(jsn,speed_query);                                   
+                                                std::cout<<"speed:"+speedtxt+"\n";
+                                            } 
+                                        }
+            // v contains x 
+                                    }                              
+                                }
+                            }
+                        }
+                    }
+
+                    std::string jsn = "{\"result\" :\"" + std::to_string(int(car_count)) + "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                    std::string speed_querystr = "/";
+                    const char* speed_query = speed_querystr.c_str();
+                    send2_compusult(jsn,speed_query);
+                    
+                    std::cout << "car:" + std::to_string(car_count) + "\n";
+                    std::cout << "person:" + std::to_string(person_count) + "\n";
+                    
+                    person_count = 0;
+                    car_count = 0;
+                    // cv::imshow("window name", mat_img);
+                    previous_box = detection_data.result_vec;
+                    putText(draw_frame, speedtxt, cv::Point2f(50, 50), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(255,255, 0), 1);
+                    cv::line(draw_frame, cv::Point( 0, frame_size.height*5/8 ), cv::Point( frame_size.width, frame_size.height*5/8), cv::Scalar( 255, 0, 0 ),2,8);
+
+                    /*   
+                    std::vector<uchar> bufr; 
+                    imencode(".jpg", draw_frame, bufr); 
+                    uchar *enc_msg = new uchar[bufr.size()];
+                    for(int i=0; i< bufr.size(); i++) enc_msg[i] = bufr[i]; 
+                    std::string encoded = base64_encode(enc_msg, bufr.size()); 
+                    */
+
+
+                    //std::cout<<encoded;
+                    // show_console_result2(detection_data.result_vec, obj_names,detection_data.frame_id);                    
+                    cv::imshow("window name", draw_frame); 
+                    // if (detection_data.frame_id % 100 == 0) {
+                    //     cv::imwrite(std::to_string(detection_data.frame_id % 100)+".jpg",draw_frame); //check				
+                    // }
 			
                     int key = cv::waitKey(3);    // 3 or 16ms
                     if (key == 'f') show_small_boxes = !show_small_boxes;
@@ -831,6 +860,7 @@ cv::imshow("window name", draw_frame);
 
                     //std::cout << " current_fps_det = " << current_fps_det << ", current_fps_cap = " << current_fps_cap << std::endl;
                 } while (!detection_data.exit_flag);
+
                 std::cout << " show detection exit \n";
 
                 cv::destroyWindow("window name");
