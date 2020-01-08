@@ -204,24 +204,13 @@ bool intersect(cv::Point2f A, cv::Point2f B, cv::Point2f C, cv::Point2f D)
     return val;
 }
 
-std::string gstreamer_pipeline (int capture_width, int capture_height, int display_width, int display_height, int framerate, int flip_method) {
-    return "nvarguscamerasrc ! video/x-raw(memory:NVMM), width=(int)" + std::to_string(capture_width) + ", height=(int)" +
-           std::to_string(capture_height) + ", format=(string)NV12, framerate=(fraction)" + std::to_string(framerate) +
-           "/1 ! nvvidconv flip-method=" + std::to_string(flip_method) + " ! video/x-raw, width=(int)" + std::to_string(display_width) + ", height=(int)" +
-           std::to_string(display_height) + ", format=(string)BGRx ! videoconvert ! video/x-raw, format=(string)BGR ! appsink";
-}
-
-// ----------------------------------------
+//add logo
 cv::Mat addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
 {
     using namespace std;
     using namespace cv;
-    
-    std::cout << "init logo"<< std::endl;
-    
-    if (filename != "web_camera") {
-        std::cout << "ERORR!! logo function is only defined for the webcam!" << std::endl;
-    }
+
+    std::cout << "init logo" << std::endl;
 
     int h = 0;
     int w = 0;
@@ -229,40 +218,36 @@ cv::Mat addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
     if (filename == "web_camera") {
         cv::VideoCapture cap(1);
 
-        // if(!cap.open(0)){
-        //     std::cout << "camera failed."<< std::endl;
-        // }            
-    
-        w = (int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)); 
-        h = (int)(cap.get(CV_CAP_PROP_FRAME_HEIGHT)); 
-        
+        w = (int)(cap.get(3));
+        h = (int)(cap.get(4));
+
         cap.release();
-    } 
+    }
     else {
         cv::VideoCapture cap(filename);
         cap.open(filename);
 
-        if(!cap.isOpened()){
-            std::cout<<"file cannot be opened!"<<std::endl;
+        if (!cap.isOpened()) {
+            std::cout << "file cannot be opened!" << std::endl;
         }
 
-        w = (int)(cap.get(CV_CAP_PROP_FRAME_WIDTH)); 
-        h = (int)(cap.get(CV_CAP_PROP_FRAME_HEIGHT));
-        
+        w = (int)(cap.get(3));
+        h = (int)(cap.get(4));
+
         cap.release();
     }
 
-    std::cout<<"frame size = w: " + std::to_string(w) + ", H: " + std::to_string(h) << std::endl;
+    std::cout << "frame size = w: " + std::to_string(w) + ", H: " + std::to_string(h) << std::endl;
 
     cv::Mat logo = cv::imread("./data/logo.png", cv::IMREAD_UNCHANGED);
-    std::cout<<"logo size = w: " + std::to_string(logo.cols) + ", H: " + std::to_string(logo.rows) << std::endl;
+    std::cout << "logo size = w: " + std::to_string(logo.cols) + ", H: " + std::to_string(logo.rows) << std::endl;
     cv::cvtColor(logo, logo, CV_BGRA2GRAY);
 
     //resize logo image based on the shrink value and the frame size
     int shrink = 10;
-    float height = float (h / shrink);        
-    float width = float (logo.cols * h / (shrink * logo.rows));
-    std::cout<<"logo size = w: " + std::to_string(int(width)) + ", H: " + std::to_string(int(height)) << std::endl;
+    float height = float(h / shrink);
+    float width = float(logo.cols * h / (shrink * logo.rows));
+    std::cout << "logo size = w: " + std::to_string(int(width)) + ", H: " + std::to_string(int(height)) << std::endl;
     cv::Size size((width), (height));
     cv::resize(logo, logo, size, 0, 0);
 
@@ -275,12 +260,12 @@ cv::Mat addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
     cv::merge(channels, logo);
     cv::bitwise_not(logo, logo);
     std::cout << logo.channels() << std::endl;
-    
-    cv::Mat test(h, w, CV_8UC4, cv::Scalar(0,0,0,0));                
-    cv::bitwise_or(logo, test(cv::Rect(w-logo.cols-5, h-logo.rows-5, logo.cols, logo.rows)), test(cv::Rect(w-logo.cols-5, h-logo.rows-5, logo.cols, logo.rows)));
+
+    cv::Mat test(h, w, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+    cv::bitwise_or(logo, test(cv::Rect(w - logo.cols - 5, h - logo.rows - 5, logo.cols, logo.rows)), test(cv::Rect(w - logo.cols - 5, h - logo.rows - 5, logo.cols, logo.rows)));
 
     return test;
-    
+
 }
 
 void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std::string> obj_names,
@@ -502,7 +487,7 @@ int main(int argc, char *argv[])
     std::vector<double> car_arr;
     std::vector<double> pers_arr;
     std::vector<double> speed_arr;
-    int flood_frame_counter;
+    int flood_frame_counter = 0;
     //time_t startsec;
     //const long double startsec = time(0) * 1000;
     std::chrono::steady_clock::time_point startsec, nowsec;
@@ -533,9 +518,16 @@ int main(int argc, char *argv[])
         {
             app_mode = "f";
             filename = argv[1];
-            cfg_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj.cfg";
-            weights_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj_final.weights";
-            names_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\obj.names";
+            
+            // for Jetson
+            cfg_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/yolo-obj.cfg"; 
+            weights_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/yolo-obj_final.weights";
+            names_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/obj.names";
+
+            //for windows
+            // cfg_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj.cfg"; 
+            // weights_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj_final.weights";
+            // names_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\obj.names";
         }
         else
         {
@@ -543,17 +535,16 @@ int main(int argc, char *argv[])
         }
     }
     else if (argc > 1) filename = argv[1];
-    
-    // Add logo
+
     temp = addUCalgaryLogo_init(temp, filename);
 
-    float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.7;
+    float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.9;
 
     Detector detector(cfg_file, weights_file);
 
     auto obj_names = objects_names_from_file(names_file);
     std::string out_videofile = "result_uselib.avi";
-    bool const save_output_videofile = false;   // true - for history
+    bool const save_output_videofile = true;   // true - for history
     bool const send_network = false;        // true - for remote detection
     bool const use_kalman_filter = false;   // true - for stationary camera
 
@@ -634,35 +625,10 @@ int main(int argc, char *argv[])
                     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
                     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
 
-                    cap.open(1);
+                    cap.open(1); //if error change this value to 0
                     cap >> cur_frame;
                 }
-                // else if (filename == "rasp_camera") { 
-                //     int capture_width = 1280 ;
-                //     int capture_height = 720 ;
-                //     int display_width = 1280 ;
-                //     int display_height = 720 ;
-                //     int framerate = 60 ;
-                //     int flip_method = 2 ;
-
-                //     std::string pipeline = gstreamer_pipeline(capture_width,
-                //     capture_height,
-                //     display_width,
-                //     display_height,
-                //     framerate,
-                //     flip_method);
-                //    // cap=cv::VideoCapture(1800);
-                //    // std::string gst ="nvarguscamerasrc !  video/x-raw(memory:NVMM), width=(int)%d, height=(int)%d, format=(string)NV12, framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! videoconvert !    video/x-raw, format=(string)BGR ! appsink";
-                //     cap = cv::VideoCapture(pipeline, CV_CAP_GSTREAMER);
-                //     //cap.open(gst);
-                //     if(!cap.isOpened()) {
-                //         std::cout<<"Failed to open camera."<<std::endl;
-                //     } else {
-                //         std::cout<<"Get a new frame from camera"<<std::endl;
-                //         cap >> cur_frame;
-                //     }
-                // }
-                else if (!use_zed_camera) { // read video file
+                else if (!use_zed_camera) {
                     cap.open(filename);
                     cap >> cur_frame;
                 }
@@ -871,12 +837,12 @@ int main(int argc, char *argv[])
                         cv::Mat output_frame;
                         do {
                             detection_data = draw2write.receive();
-
-                            // Add logo
+                            
+                            //add logo
                             cv::cvtColor(detection_data.draw_frame, detection_data.draw_frame, CV_BGR2BGRA);
                             cv::addWeighted(temp, 1, detection_data.draw_frame, 0.9, 0.0, detection_data.draw_frame); //addUCalgaryLogo
                             cv::cvtColor(detection_data.draw_frame, detection_data.draw_frame, CV_BGRA2BGR);
-
+                            
                             if (detection_data.draw_frame.channels() == 4) cv::cvtColor(detection_data.draw_frame, output_frame, CV_RGBA2RGB);
                             else output_frame = detection_data.draw_frame;
                             output_video << output_frame;
@@ -917,12 +883,11 @@ int main(int argc, char *argv[])
 
                     detection_data = draw2show.receive();
                     cv::Mat draw_frame = detection_data.draw_frame;
-                     
-                    // Add logo
+
+                    //add logo
                     cv::cvtColor(draw_frame, draw_frame, CV_BGR2BGRA);
                     cv::addWeighted(temp, 1, draw_frame, 0.9, 0.0, draw_frame); //addUCalgaryLogo
                     cv::cvtColor(draw_frame, draw_frame, CV_BGRA2BGR);
-                    
                     //if (extrapolate_flag) {
                     //    cv::putText(draw_frame, "extrapolate", cv::Point2f(10, 40), cv::FONT_HERSHEY_COMPLEX_SMALL, 1.0, cv::Scalar(50, 50, 0), 2);
                     //}
@@ -952,7 +917,7 @@ int main(int argc, char *argv[])
                                             cv::line(draw_frame, cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Scalar(255, 0, 0), 2, 8);
                                             bool res_down = intersect(cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Point2f(0, frame_size.height / 2), cv::Point2f(draw_frame.size().width, frame_size.height / 2));
                                             if (res_down == true) {
-                                                intersect_frame.push_back(detection_data.frame_id);
+                                                intersect_frame.push_back(int(detection_data.frame_id));
                                                 intersect_track.push_back(j.track_id);
                                                 std::cout << "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\n";
 
@@ -963,7 +928,9 @@ int main(int argc, char *argv[])
                                                 if (res_up == true) {
                                                     std::cout << "ddddddddddddddddddddddddddddddddddddddddd\n";
                                                     std::vector<int> ::iterator itr = std::find(intersect_track.begin(), intersect_track.end(), i.track_id);
-                                                    int indx = std::distance(intersect_track.begin(), itr);
+                                                    if (itr != intersect_track.end())
+                                                    {
+                                                        int indx = std::distance(intersect_track.begin(), itr);
                                                     std::vector<int>::iterator it = intersect_frame.begin();
                                                     std::advance(it, indx);
                                                     //std::cout<<"---------------------------this frame----------------------------\n";
@@ -972,16 +939,20 @@ int main(int argc, char *argv[])
                                                     //std::cout<<std::to_string(*it)+"\n"; 
                                                     //std::cout<<"---------------------------delta t----------------------------\n";
                                                     int this_frame = int(*it);
-                                                    double deltat = (double(detection_data.frame_id - this_frame)) / 90;
+                                                    double deltat = (double(int(detection_data.frame_id)) - double(this_frame)) / 90;
                                                     //std::cout<<std::to_string(deltat); 
                                                     double speedo = 8 / deltat;
                                                     intersect_frame.clear();
                                                     intersect_track.clear();
-                                                    if (speedo > 40 && speedo < 200)
+                                                    if (speedo < 200)
                                                     {
                                                         speedtxt = std::to_string(int(speedo));
                                                         speed_arr.push_back(speedo);
                                                     }
+                                                    if (speedo < 40)
+                                                        std::cout << "mmmmmmmmmmm" << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
+                                                    else
+                                                        std::cout << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
                                                     //time_t rawtime;
                                                     //struct tm*timeinfo;
                                                     //time(&rawtime);
@@ -1000,6 +971,7 @@ int main(int argc, char *argv[])
                                                     std::string speed_querystr = "/v1.0/Datastreams(1630)/Observations";
                                                     const char* speed_query = speed_querystr.c_str();
                                                     // send2_compusult(jsn, speed_querystr, speedtxt);
+                                                }
                                                 }
                                             }
                                             // v contains x 
@@ -1111,6 +1083,7 @@ int main(int argc, char *argv[])
                                flood_val = "low";
                            else if (indx == 2)
                                flood_val = "no flood";
+                           std::cout << "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj" << std::endl;
                            std::string jsn_flood = "{\"result\" :\"" + flood_val + "\", \"FeatureOfInterest\": {\"@iot.id\": \"9978\"}" + "}";
                            std::string flood_querystr = "/v1.0/Datastreams(9883)/Observations";
                            send2_compusult(jsn_flood, flood_querystr, flood_val);
@@ -1134,8 +1107,8 @@ int main(int argc, char *argv[])
                     // show_console_result2(detection_data.result_vec, obj_names,detection_data.frame_id);                    
                     cv::resize(draw_frame, draw_frame, cv::Size(1280, 960));
                     cv::imshow("window name", draw_frame);
-                     //if (detection_data.frame_id % 100 == 0) {
-                        // cv::imwrite(std::to_string(detection_data.frame_id % 100)+".jpg",draw_frame); //check				
+                     //if (detection_data.frame_id % 1000 == 0) {
+                      //   cv::imwrite(std::to_string(detection_data.frame_id % 1000)+".jpg",draw_frame); //check				
                      //}
 
                     int key = cv::waitKey(3);    // 3 or 16ms
