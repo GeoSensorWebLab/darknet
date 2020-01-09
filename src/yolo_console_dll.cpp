@@ -177,6 +177,9 @@ std::vector<bbox_t> get_3d_coordinates(std::vector<bbox_t> bbox_vect, cv::Mat xy
 #endif    // USE_CMAKE_LIBS
 #endif    // CV_VERSION_EPOCH
 std::string app_mode;
+std::string speed_app;
+std::string direction = "to_camera";
+std::string height_ratio = "0.5";
 bool ccw(cv::Point2f A, cv::Point2f B, cv::Point2f C)
 {
     bool val = true;
@@ -204,7 +207,6 @@ bool intersect(cv::Point2f A, cv::Point2f B, cv::Point2f C, cv::Point2f D)
     return val;
 }
 
-//add logo
 cv::Mat addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
 {
     using namespace std;
@@ -212,11 +214,15 @@ cv::Mat addUCalgaryLogo_init(cv::Mat temp, std::string filename) //check
 
     std::cout << "init logo" << std::endl;
 
+    if (filename != "web_camera") {
+        std::cout << "ERORR!! logo function is only defined for the webcam!" << std::endl;
+    }
+
     int h = 0;
     int w = 0;
 
     if (filename == "web_camera") {
-        cv::VideoCapture cap(1);
+        cv::VideoCapture cap(0);
 
         w = (int)(cap.get(3));
         h = (int)(cap.get(4));
@@ -275,9 +281,9 @@ void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std
 
     for (auto &i : result_vec) {
         cv::Scalar color = obj_id_to_color(i.obj_id);
-        if (app_mode == "t")
+        if (app_mode == "t" || speed_app=="speed")
         {
-            if (i.obj_id == 2)
+            if (i.obj_id == 2 || i.obj_id==0)
             {
                 cv::rectangle(mat_img, cv::Rect(i.x, i.y, i.w, i.h), color, 2);
             }
@@ -309,9 +315,9 @@ void draw_boxes(cv::Mat mat_img, std::vector<bbox_t> result_vec, std::vector<std
                 int const max_width_3d = (text_size_3d.width > i.w + 2) ? text_size_3d.width : (i.w + 2);
                 if (max_width_3d > max_width) max_width = max_width_3d;
             }
-            if (app_mode == "t")
+            if (app_mode == "t" || speed_app=="speed")
             {
-                if (i.obj_id == 2)
+                if (i.obj_id == 2 || i.obj_id == 0)
                 {
                     cv::rectangle(mat_img, cv::Point2f(std::max((int)i.x - 1, 0), std::max((int)i.y - 10, 0)),
                         cv::Point2f(std::min((int)i.x + max_width, mat_img.cols - 1), std::min((int)i.y, mat_img.rows - 1)),
@@ -481,13 +487,13 @@ int find_maximum(int array_vals[3])
 int main(int argc, char *argv[])
 {
     std::string  names_file = "data/coco.names";
-    std::string  cfg_file = "cfg/yolov3.cfg";
+    std::string  cfg_file = "yolov3.cfg";
     std::string  weights_file = "yolov3.weights";
     std::string filename;
     std::vector<double> car_arr;
     std::vector<double> pers_arr;
     std::vector<double> speed_arr;
-    int flood_frame_counter = 0;
+    int flood_frame_counter;
     //time_t startsec;
     //const long double startsec = time(0) * 1000;
     std::chrono::steady_clock::time_point startsec, nowsec;
@@ -499,17 +505,48 @@ int main(int argc, char *argv[])
     auto t0s = Time::now();
 
     //startsec = time(NULL);
-    if (argc > 4) {    //voc.names yolo-voc.cfg yolo-voc.weights test.mp4
-        names_file = argv[1];
-        cfg_file = argv[2];
-        weights_file = argv[3];
-        filename = argv[4];
+     if (argc > 4) {    //voc.names yolo-voc.cfg yolo-voc.weights test.mp4
+       
+        
+        speed_app = argv[2];
+        std::cout << "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr" << speed_app << std::endl;
+        if (speed_app == "speed")
+        {
+            filename = argv[1];
+            direction = argv[3];
+            if (!(direction == "to_camera" || direction == "from_camera"))
+            {
+                std::cout << "please determine the direction of cars moving: to_camera|from_camera";
+            }
+            else
+            {
+                height_ratio = argv[4];
+                try
+                {
+                    double ratio = std::stod(height_ratio);
+                }
+                catch (...)
+                {
+                    std::cout << "you shuold specify a number for the street line location Y to the frame height for instance 0.5" << std::endl;
+                }
+            }
+        }
+        else
+        {
+            std::cout << "if you need to use the speed module you have to type speed after determining the flood|traffic mode" << std::endl;
+            names_file = argv[1];
+            cfg_file = argv[2];
+            weights_file = argv[3];
+            filename = argv[4];
+        }
     }
     else if (argc > 2 && argc<4)
     {
+         
         
         if (std::string( argv[2]) == "traffic")
         {
+            std::cout << "ttrtrrtrrttrrtrtrtrtrtrtrtrtrtrtrtrtrtrtrtrtrtrtrt" << std::endl;
             filename = argv[1];
             app_mode = "t";
         }
@@ -518,16 +555,9 @@ int main(int argc, char *argv[])
         {
             app_mode = "f";
             filename = argv[1];
-            
-            // for Jetson
-            cfg_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/yolo-obj.cfg"; 
-            weights_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/yolo-obj_final.weights";
-            names_file = "/home/mahnoush/darknetV2_yolov3_/darknet-alexyabEdited/flood/obj.names";
-
-            //for windows
-            // cfg_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj.cfg"; 
-            // weights_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj_final.weights";
-            // names_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\obj.names";
+            cfg_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj.cfg";
+            weights_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\yolo-obj_final.weights";
+            names_file = "C:\\Users\\geose\\Documents\\darknet-master_uslib\\Release\\YOLO\\trainedModel\\obj.names";
         }
         else
         {
@@ -625,7 +655,7 @@ int main(int argc, char *argv[])
                     cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
                     cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
 
-                    cap.open(1); //if error change this value to 0
+                    cap.open(0);
                     cap >> cur_frame;
                 }
                 else if (!use_zed_camera) {
@@ -837,12 +867,9 @@ int main(int argc, char *argv[])
                         cv::Mat output_frame;
                         do {
                             detection_data = draw2write.receive();
-                            
-                            //add logo
                             cv::cvtColor(detection_data.draw_frame, detection_data.draw_frame, CV_BGR2BGRA);
                             cv::addWeighted(temp, 1, detection_data.draw_frame, 0.9, 0.0, detection_data.draw_frame); //addUCalgaryLogo
                             cv::cvtColor(detection_data.draw_frame, detection_data.draw_frame, CV_BGRA2BGR);
-                            
                             if (detection_data.draw_frame.channels() == 4) cv::cvtColor(detection_data.draw_frame, output_frame, CV_RGBA2RGB);
                             else output_frame = detection_data.draw_frame;
                             output_video << output_frame;
@@ -884,7 +911,6 @@ int main(int argc, char *argv[])
                     detection_data = draw2show.receive();
                     cv::Mat draw_frame = detection_data.draw_frame;
 
-                    //add logo
                     cv::cvtColor(draw_frame, draw_frame, CV_BGR2BGRA);
                     cv::addWeighted(temp, 1, draw_frame, 0.9, 0.0, draw_frame); //addUCalgaryLogo
                     cv::cvtColor(draw_frame, draw_frame, CV_BGRA2BGR);
@@ -895,7 +921,7 @@ int main(int argc, char *argv[])
                     int h1 = 0;
                     int w2 = 0;
                     int h2 = 0;
-                    if (app_mode == "t")
+                    if (app_mode == "t" || speed_app == "speed")
                     {
                         for (auto &i : detection_data.result_vec) {
                             if (i.obj_id == 0) {
@@ -904,80 +930,91 @@ int main(int argc, char *argv[])
 
                             if (i.obj_id == 2) {
                                 car_count++;
-                                for (auto &j : previous_box) {
-                                    if (j.obj_id == 2) {
-                                        w1 = j.x;
-                                        h1 = j.y;
-                                        w2 = j.x + j.w;
-                                        h2 = j.y + j.h;
+                                if (speed_app == "speed")
+                                {
+                                    for (auto &j : previous_box) {
+                                        if (j.obj_id == 2) {
+                                            w1 = j.x;
+                                            h1 = j.y;
+                                            w2 = j.x + j.w;
+                                            h2 = j.y + j.h;
+                                            double lineratio = std::stod(height_ratio);
+                                            if (i.track_id == j.track_id) {
+                                                std::cout << "**************************************************\n";
+                                                std::cout << std::to_string(w2) + "," + std::to_string(h2) + "----------" + std::to_string(i.x + i.w) + "," + std::to_string(i.y + i.h) + "\n";
+                                                cv::line(draw_frame, cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Scalar(255, 0, 0), 2, 8);
+                                                bool res_down;
+                                                if(direction=="to_camera")
+                                                    res_down = intersect(cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Point2f(0, frame_size.height*lineratio), cv::Point2f(draw_frame.size().width, frame_size.height*lineratio));
+                                                else if (direction == "from_camera")
+                                                    res_down = intersect(cv::Point2f(w1, h1), cv::Point2f(i.x, i.y), cv::Point2f(0, frame_size.height*lineratio), cv::Point2f(draw_frame.size().width, frame_size.height*lineratio));
+                                                if (res_down == true) {
+                                                    intersect_frame.push_back(int(detection_data.frame_id));
+                                                    intersect_track.push_back(j.track_id);
+                                                    std::cout << "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\n";
 
-                                        if (i.track_id == j.track_id) {
-                                            std::cout << "**************************************************\n";
-                                            std::cout << std::to_string(w2) + "," + std::to_string(h2) + "----------" + std::to_string(i.x + i.w) + "," + std::to_string(i.y + i.h) + "\n";
-                                            cv::line(draw_frame, cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Scalar(255, 0, 0), 2, 8);
-                                            bool res_down = intersect(cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Point2f(0, frame_size.height / 2), cv::Point2f(draw_frame.size().width, frame_size.height / 2));
-                                            if (res_down == true) {
-                                                intersect_frame.push_back(int(detection_data.frame_id));
-                                                intersect_track.push_back(j.track_id);
-                                                std::cout << "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\n";
+                                                }
 
-                                            }
+                                                if (intersect_track.size() > 0) {
+                                                    bool res_up;
+                                                    if (direction == "to_camera")
+                                                        res_up = intersect(cv::Point2f(w1, h1), cv::Point2f(i.x, i.y), cv::Point2f(0, frame_size.height*lineratio), cv::Point2f(draw_frame.size().width, frame_size.height*lineratio));
+                                                    else if (direction == "from_camera")
+                                                        res_down = intersect(cv::Point2f(w2, h2), cv::Point2f(i.x + i.w, i.y + i.h), cv::Point2f(0, frame_size.height*lineratio), cv::Point2f(draw_frame.size().width, frame_size.height*lineratio));
+                                                    if (res_up == true) {
+                                                        std::cout << "ddddddddddddddddddddddddddddddddddddddddd\n";
+                                                        std::vector<int> ::iterator itr = std::find(intersect_track.begin(), intersect_track.end(), i.track_id);
+                                                        if (itr != intersect_track.end())
+                                                        {
+                                                            int indx = std::distance(intersect_track.begin(), itr);
+                                                            std::vector<int>::iterator it = intersect_frame.begin();
+                                                            std::advance(it, indx);
+                                                            //std::cout<<"---------------------------this frame----------------------------\n";
+                                                            //std::cout<<std::to_string(detection_data.frame_id)+"\n";
+                                                            //std::cout<<"---------------------------past frame----------------------------\n";
+                                                            //std::cout<<std::to_string(*it)+"\n"; 
+                                                            //std::cout<<"---------------------------delta t----------------------------\n";
+                                                            int this_frame = int(*it);
+                                                            double deltat = (double(int(detection_data.frame_id)) - double(this_frame)) / 90;
+                                                            //std::cout<<std::to_string(deltat); 
+                                                            double speedo = 8 / deltat;
+                                                            intersect_frame.clear();
+                                                            intersect_track.clear();
+                                                            if (speedo < 200)
+                                                            {
+                                                                speedtxt = std::to_string(int(speedo));
+                                                                speed_arr.push_back(speedo);
+                                                            }
+                                                            if (speedo < 40)
+                                                                std::cout << "mmmmmmmmmmm" << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
+                                                            else
+                                                                std::cout << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
+                                                            //time_t rawtime;
+                                                            //struct tm*timeinfo;
+                                                            //time(&rawtime);
+                                                            //timeinfo = gmtime(&rawtime);
+                                                            //std::string strtime = asctime(timeinfo);
+                                                            //char buf[sizeof "2019-12-09T19:49:39Z"];
+                                                            //strftime(buf, sizeof buf, "%FT%TZ", timeinfo);
 
-                                            if (intersect_track.size() > 0) {
-                                                bool res_up = intersect(cv::Point2f(w1, h1), cv::Point2f(i.x, i.y), cv::Point2f(0, frame_size.height / 2), cv::Point2f(draw_frame.size().width, frame_size.height / 2));
-                                                if (res_up == true) {
-                                                    std::cout << "ddddddddddddddddddddddddddddddddddddddddd\n";
-                                                    std::vector<int> ::iterator itr = std::find(intersect_track.begin(), intersect_track.end(), i.track_id);
-                                                    if (itr != intersect_track.end())
-                                                    {
-                                                        int indx = std::distance(intersect_track.begin(), itr);
-                                                    std::vector<int>::iterator it = intersect_frame.begin();
-                                                    std::advance(it, indx);
-                                                    //std::cout<<"---------------------------this frame----------------------------\n";
-                                                    //std::cout<<std::to_string(detection_data.frame_id)+"\n";
-                                                    //std::cout<<"---------------------------past frame----------------------------\n";
-                                                    //std::cout<<std::to_string(*it)+"\n"; 
-                                                    //std::cout<<"---------------------------delta t----------------------------\n";
-                                                    int this_frame = int(*it);
-                                                    double deltat = (double(int(detection_data.frame_id)) - double(this_frame)) / 90;
-                                                    //std::cout<<std::to_string(deltat); 
-                                                    double speedo = 8 / deltat;
-                                                    intersect_frame.clear();
-                                                    intersect_track.clear();
-                                                    if (speedo < 200)
-                                                    {
-                                                        speedtxt = std::to_string(int(speedo));
-                                                        speed_arr.push_back(speedo);
+                                                            //std::cout << buf;
+                                                            //std::string bufString(buf);
+                                                            //std::string buffer = "\"" + bufString + "\"";
+                                                            // std::string jsn = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(speedo))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                                                            //send2_compusult(jsn,speed_query);                                   
+                                                            std::cout << "speed:" + speedtxt + "\n";
+                                                            // std::string jsn = "{\"result\" :\"" + speedtxt + "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
+                                                            std::string speed_querystr = "/v1.0/Datastreams(1630)/Observations";
+                                                            const char* speed_query = speed_querystr.c_str();
+                                                            // send2_compusult(jsn, speed_querystr, speedtxt);
+                                                        }
                                                     }
-                                                    if (speedo < 40)
-                                                        std::cout << "mmmmmmmmmmm" << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
-                                                    else
-                                                        std::cout << detection_data.frame_id << "  " << this_frame << "  " << double(detection_data.frame_id - this_frame) << std::endl;
-                                                    //time_t rawtime;
-                                                    //struct tm*timeinfo;
-                                                    //time(&rawtime);
-                                                    //timeinfo = gmtime(&rawtime);
-                                                    //std::string strtime = asctime(timeinfo);
-                                                    //char buf[sizeof "2019-12-09T19:49:39Z"];
-                                                    //strftime(buf, sizeof buf, "%FT%TZ", timeinfo);
-
-                                                    //std::cout << buf;
-                                                    //std::string bufString(buf);
-                                                    //std::string buffer = "\"" + bufString + "\"";
-                                                    // std::string jsn = "{\"phenomenonTime\": " + buffer + ",\"resultTime\" : " + buffer + ",\"result\" :\""+ std::to_string(int(speedo))+ "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
-                                                    //send2_compusult(jsn,speed_query);                                   
-                                                    std::cout << "speed:" + speedtxt + "\n";
-                                                    // std::string jsn = "{\"result\" :\"" + speedtxt + "\", \"FeatureOfInterest\": {\"@iot.id\": \"28\"}" + "}";
-                                                    std::string speed_querystr = "/v1.0/Datastreams(1630)/Observations";
-                                                    const char* speed_query = speed_querystr.c_str();
-                                                    // send2_compusult(jsn, speed_querystr, speedtxt);
                                                 }
-                                                }
+                                                // v contains x 
                                             }
-                                            // v contains x 
                                         }
                                     }
-                                }
+                            }
                             }
                         }
                         std::cout << "car:" + std::to_string(car_count) + "\n";
@@ -1025,20 +1062,23 @@ int main(int argc, char *argv[])
                         }
                         if (d_s.count() > 10000)
                         {
-                            t0s = t1;
-                            double speed_sum = 0;
-                            for (int s = 0; s < (double)speed_arr.size(); s++)
+                            if (speed_app == "speed")
                             {
-                                speed_sum += speed_arr[s];
-                            }
-                            if (speed_arr.size() > 0)
-                            {
-                                int speed_average = (int)floor(speed_sum / (double)speed_arr.size());
-                                std::cout << speed_sum << ", " << speed_arr.size() << ", " << floor(speed_sum / speed_arr.size()) << std::endl;
-                                std::string jsn = "{\"result\" :\"" + std::to_string(speed_average) + "\", \"FeatureOfInterest\": {\"@iot.id\": \"5321\"}" + "}";
-                                std::string speed_querystr = "/v1.0/Datastreams(5323)/Observations";
-                                send2_compusult(jsn, speed_querystr, std::to_string(speed_average));
-                                speed_arr.clear();
+                                t0s = t1;
+                                double speed_sum = 0;
+                                for (int s = 0; s < (double)speed_arr.size(); s++)
+                                {
+                                    speed_sum += speed_arr[s];
+                                }
+                                if (speed_arr.size() > 0)
+                                {
+                                    int speed_average = (int)floor(speed_sum / (double)speed_arr.size());
+                                    std::cout << speed_sum << ", " << speed_arr.size() << ", " << floor(speed_sum / speed_arr.size()) << std::endl;
+                                    std::string jsn = "{\"result\" :\"" + std::to_string(speed_average) + "\", \"FeatureOfInterest\": {\"@iot.id\": \"5321\"}" + "}";
+                                    std::string speed_querystr = "/v1.0/Datastreams(5323)/Observations";
+                                    send2_compusult(jsn, speed_querystr, std::to_string(speed_average));
+                                    speed_arr.clear();
+                                }
                             }
                         }
                         person_count = 0;
@@ -1047,7 +1087,6 @@ int main(int argc, char *argv[])
                         previous_box = detection_data.result_vec;
                         //cv::rectangle(draw_frame, cv::Rect(20, 20, 100, 20), cv::Scalar(255, 0, 0), 2);
                         cv::putText(draw_frame, speedtxt, cv::Point(25, 50), cv::FONT_HERSHEY_COMPLEX_SMALL, 3, cv::Scalar(255, 255, 255), 1);
-                        cv::line(draw_frame, cv::Point(0, frame_size.height / 2), cv::Point(frame_size.width, frame_size.height / 2), cv::Scalar(255, 0, 0), 2, 8);
 
                     }
                     else if (app_mode == "f")
@@ -1101,8 +1140,9 @@ int main(int argc, char *argv[])
                     for(int i=0; i< bufr.size(); i++) enc_msg[i] = bufr[i];
                     std::string encoded = base64_encode(enc_msg, bufr.size());
                     */
-
-
+                    double rat = std::stod(height_ratio);
+                    if(speed_app=="speed")
+                    cv::line(draw_frame, cv::Point(0, frame_size.height*rat), cv::Point(frame_size.width, frame_size.height*rat), cv::Scalar(255, 0, 0), 2, 8);
                     //std::cout<<encoded;
                     // show_console_result2(detection_data.result_vec, obj_names,detection_data.frame_id);                    
                     cv::resize(draw_frame, draw_frame, cv::Size(1280, 960));
